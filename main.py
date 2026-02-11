@@ -898,14 +898,33 @@ class SMBBrowserApp:
     def refresh_shares(self):
         try:
             shares = self.conn.listShares()
-                    self.root.after(0, lambda: self.show_shares(shares))
+            self.root.after(0, lambda: self.show_shares(shares))
         except Exception as e:
              self.show_error("连接错误", str(e))
 
     def on_refresh(self):
+        threading.Thread(target=self._refresh_logic, daemon=True).start()
+
+    def _refresh_logic(self):
+        self.update_status("正在刷新...")
+        if self.conn:
+            try:
+                # Try simple echo or list shares to check connection
+                self.conn.listShares(timeout=5)
+                # If we are in a share, list files, otherwise list shares
+                if self.current_share:
+                    self.list_files()
+                else:
+                    self.refresh_shares()
+                    
+                self.update_status("刷新完成")
+            except Exception as e:
+                print(f"Connection lost during refresh: {e}")
+                self.update_status("连接已断开，正在尝试重连...")
+                self.connect()
         else:
-            self.update_status(f"正在刷新...")
-            threading.Thread(target=self.list_files, daemon=True).start()
+             self.update_status("未连接，正在尝试重连...")
+             self.connect()
 
     def execute_action(self, mode):
         selected_items = self.tree.selection()
