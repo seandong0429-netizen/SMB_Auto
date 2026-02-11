@@ -1,0 +1,49 @@
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Env
+venv/
+env/
+ENV/
+
+# PyInstaller
+*.manifest
+*.spec
+
+# IDE
+.idea/
+.vscode/
+
+# Local Config & History (Should not be committed if personal, but maybe user wants it?)
+# Usually we ignore user-specific config.
+# Based on main.py, config is in ~/.yunkai_smb_client/ so it is outside repo anyway.
+# But let's check if there are any local files in this dir.
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
