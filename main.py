@@ -219,9 +219,15 @@ class SettingsDialog(tk.Toplevel):
 
         # --- Content inside content_frame (Strict Vertical Pack) ---
         
-        # 1. Automation Switch
+        # 1. Top Row: Auto Download & Auto Start
+        top_row = ttk.Frame(content_frame)
+        top_row.pack(fill=tk.X, pady=(0, 10))
+        
         self.auto_enabled = tk.BooleanVar(value=self.config.get("auto_download_enabled", False))
-        ttk.Checkbutton(content_frame, text="启用自动监控下载", variable=self.auto_enabled).pack(anchor=tk.W, pady=(0, 5))
+        ttk.Checkbutton(top_row, text="启用自动监控下载", variable=self.auto_enabled).pack(side=tk.LEFT)
+        
+        self.auto_start = tk.BooleanVar(value=self.config.get("auto_start_enabled", False))
+        ttk.Checkbutton(top_row, text="开机自动启动软件", variable=self.auto_start).pack(side=tk.RIGHT)
         
         # 1.1 Check Interval
         interval_frame = ttk.Frame(content_frame)
@@ -256,8 +262,8 @@ class SettingsDialog(tk.Toplevel):
         self.del_after = tk.BooleanVar(value=self.config.get("delete_after_download", False))
         ttk.Checkbutton(content_frame, text="下载后自动删除服务器文件", variable=self.del_after).pack(anchor=tk.W, pady=2)
 
-        self.auto_start = tk.BooleanVar(value=self.config.get("auto_start_enabled", False))
-        ttk.Checkbutton(content_frame, text="开机自动启动软件", variable=self.auto_start).pack(anchor=tk.W, pady=2)
+        # self.auto_start = tk.BooleanVar(value=self.config.get("auto_start_enabled", False))
+        # ttk.Checkbutton(content_frame, text="开机自动启动软件", variable=self.auto_start).pack(anchor=tk.W, pady=2)
         
         self.skip_today = tk.BooleanVar(value=self.config.get("skip_downloaded_today", True))
         ttk.Checkbutton(content_frame, text="跳过今日已下载过的文件", variable=self.skip_today).pack(anchor=tk.W, pady=2)
@@ -312,6 +318,35 @@ class SMBBrowserApp:
         self.style = ttk.Style()
         self.style.theme_use('clam')
         
+        # Configure Colors and Styles
+        bg_color = "white"
+        btn_bg = "#E1F5FE" # Light Blue
+        btn_fg = "black"
+        
+        self.root.configure(bg=bg_color)
+        
+        self.style.configure("TFrame", background=bg_color)
+        self.style.configure("TLabel", background=bg_color)
+        self.style.configure("TCheckbutton", background=bg_color)
+        
+        # Button Style
+        self.style.configure("TButton", 
+            background=btn_bg, 
+            foreground=btn_fg, 
+            borderwidth=1,
+            focusthickness=3,
+            focuscolor="none"
+        )
+        self.style.map("TButton",
+            background=[('active', '#B3E5FC'), ('pressed', '#81D4FA')]
+        )
+        
+        # Try to make Checkbutton look like a checkmark (green if possible)
+        # Clam theme uses an indicator element. We can try to set indicator color.
+        self.style.map("TCheckbutton",
+            indicatorcolor=[('selected', 'green'), ('pressed', 'lightgreen')]
+        )
+        
         self.conn = None
         self.current_share = None
         self.current_path = ""
@@ -336,7 +371,7 @@ class SMBBrowserApp:
         self.download_save_path = tk.StringVar(value=os.path.join(os.path.expanduser("~"), "Desktop"))
         
         self.setup_ui()
-        self.setup_menu()
+        # self.setup_menu() # Removed menu as requested
         self.load_config()
         self.start_automation_thread()
         
@@ -454,6 +489,8 @@ class SMBBrowserApp:
         self.connect_btn.grid(row=0, column=8, padx=5)
 
         ttk.Button(top_frame, text="配置", command=self.show_settings, width=8).grid(row=0, column=9, padx=5)
+        
+        ttk.Button(top_frame, text="关于", command=self.show_about, width=8).grid(row=0, column=10, padx=5)
 
         # Middle Frame: File Browser
         mid_frame = ttk.Frame(self.root, padding="10")
@@ -861,17 +898,11 @@ class SMBBrowserApp:
     def refresh_shares(self):
         try:
             shares = self.conn.listShares()
-            self.root.after(0, lambda: self.show_shares(shares))
+                    self.root.after(0, lambda: self.show_shares(shares))
         except Exception as e:
              self.show_error("连接错误", str(e))
 
     def on_refresh(self):
-        if self.conn is None:
-            return
-
-        if self.current_share is None:
-            self.update_status("正在刷新共享列表...")
-            threading.Thread(target=self.refresh_shares, daemon=True).start()
         else:
             self.update_status(f"正在刷新...")
             threading.Thread(target=self.list_files, daemon=True).start()
