@@ -67,6 +67,122 @@ class DownloadHistory:
         # Optional: Clean records older than X days
         pass
 
+class RemoteBrowserDialog(tk.Toplevel):
+    def __init__(self, parent, conn, title="选择远程文件夹"):
+        super().__init__(parent)
+        self.conn = conn
+        self.title(title)
+        self.geometry("600x400")
+        self.result_path = None
+        
+        # Center window
+        parent_x = parent.winfo_x()
+        parent_y = parent.winfo_y()
+        self.geometry(f"+{parent_x + 50}+{parent_y + 50}")
+
+        self.setup_ui()
+        self.load_shares()
+
+    def setup_ui(self):
+        # Top Path
+        self.path_var = tk.StringVar(value="")
+        ttk.Label(self, text="当前路径:").pack(anchor=tk.W, padx=10, pady=(10, 0))
+        ttk.Label(self, textvariable=self.path_var, font=("", 10, "bold")).pack(anchor=tk.W, padx=10, pady=(0, 5))
+        
+        # Treeview
+        frame = ttk.Frame(self)
+        frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        scrollbar = ttk.Scrollbar(frame, orient=tk.VERTICAL)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        self.tree = ttk.Treeview(frame, columns=("Type",), show="tree", yscrollcommand=scrollbar.set)
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=self.tree.yview)
+        
+        self.tree.bind("<Double-1>", self.on_double_click)
+        
+        # Buttons
+        btn_frame = ttk.Frame(self, padding="10")
+        btn_frame.pack(fill=tk.X)
+        
+        ttk.Button(btn_frame, text="返回上一级", command=self.go_back).pack(side=tk.LEFT)
+        ttk.Button(btn_frame, text="取消", command=self.destroy).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(btn_frame, text="确定选择此目录", command=self.confirm_selection).pack(side=tk.RIGHT, padx=5)
+
+    def load_shares(self):
+        self.current_share = None
+        self.current_path = ""
+        self.path_var.set("\\\\Server")
+        
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+            
+        try:
+            shares = self.conn.listShares()
+            for share in shares:
+                if not share.isSpecial and '$' not in share.name:
+                    self.tree.insert("", "end", text=share.name, values=("Share",), iid=share.name)
+        except Exception as e:
+            messagebox.showerror("错误", f"无法获取共享列表: {e}")
+
+    def load_path(self, share, path):
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+            
+        try:
+            files = self.conn.listPath(share, path)
+            for f in files:
+                if f.filename in ['.', '..']: continue
+                if f.isDirectory:
+                    self.tree.insert("", "end", text=f.filename, values=("Dir",))
+        except Exception as e:
+            messagebox.showerror("错误", f"无法获取目录列表: {e}")
+
+    def on_double_click(self, event):
+        item_id = self.tree.selection()[0]
+        item = self.tree.item(item_id)
+        name = item['text']
+        
+        if self.current_share is None:
+            self.current_share = name
+            self.current_path = ""
+            self.path_var.set(f"\\\\Server\\{name}")
+            self.load_path(self.current_share, "")
+        else:
+            if self.current_path:
+                self.current_path += f"/{name}"
+            else:
+                self.current_path = name
+            
+            display_path = self.current_path.replace('/', '\\')
+            self.path_var.set(f"\\\\Server\\{self.current_share}\\{display_path}")
+            self.load_path(self.current_share, self.current_path)
+
+    def go_back(self):
+        if self.current_share is None:
+            return
+            
+        if not self.current_path:
+            self.load_shares()
+        else:
+            if '/' in self.current_path:
+                self.current_path = self.current_path.rsplit('/', 1)[0]
+            else:
+                self.current_path = ""
+            
+            display_path = self.current_path.replace('/', '\\')
+            self.path_var.set(f"\\\\Server\\{self.current_share}\\{display_path}")
+            self.load_path(self.current_share, self.current_path)
+
+    def confirm_selection(self):
+        if self.current_share:
+            full_path = f"{self.current_share}/{self.current_path}" if self.current_path else self.current_share
+            self.result_path = full_path
+            self.destroy()
+        else:
+            messagebox.showwarning("提示", "请选择一个共享文件夹或子文件夹")
+
 class SettingsDialog(tk.Toplevel):
     def __init__(self, parent, app, config):
         super().__init__(parent)
@@ -91,19 +207,29 @@ class SettingsDialog(tk.Toplevel):
 
         # 1. Automation Switch
         self.auto_enabled = tk.BooleanVar(value=self.config.get("auto_download_enabled", False))
-        ttk.Checkbutton(frame, text="启用自动监控下载", variable=self.auto_enabled).grid(row=0, column=0, sticky=tk.W, pady=(0, 10))
+        ttk.Checkbutton(frame, text="启用自动监控下载", variable=self.auto_enabled).grid(row=0, column=0, sticky=tk.W, pady=(0, 2))
+        
+        # 1.1 Check Interval
+        sub_frame = ttk.Frame(frame)
+        sub_frame.grid(row=1, column=0, sticky=tk.W, pady=(0, 10))
+        ttk.Label(sub_frame, text="检测间隔(秒):").pack(side=tk.LEFT)
+        self.interval_var = tk.IntVar(value=self.config.get("check_interval", 60))
+        ttk.Entry(sub_frame, textvariable=self.interval_var, width=5).pack(side=tk.LEFT, padx=5)
 
         # 2. Source Path (Server)
-        ttk.Label(frame, text="服务器源路径 (共享名/文件夹):").grid(row=1, column=0, sticky=tk.W, pady=(5, 0))
+        ttk.Label(frame, text="服务器源路径 (共享名/文件夹):").grid(row=2, column=0, sticky=tk.W, pady=(5, 0))
+        src_frame = ttk.Frame(frame)
+        src_frame.grid(row=3, column=0, sticky=tk.W, pady=(0, 10))
+        
         self.source_path_var = tk.StringVar(value=self.config.get("auto_source_path", ""))
-        source_entry = ttk.Entry(frame, textvariable=self.source_path_var, width=50)
-        source_entry.grid(row=2, column=0, sticky=tk.W, pady=(0, 10))
-        ttk.Label(frame, text="例如: scanning/pending (不用带 \\\\IP)").grid(row=3, column=0, sticky=tk.W, pady=(0, 10), padx=5)
+        ttk.Entry(src_frame, textvariable=self.source_path_var, width=40).pack(side=tk.LEFT)
+        ttk.Button(src_frame, text="选择...", command=self.choose_source_path).pack(side=tk.LEFT, padx=5)
+        ttk.Label(frame, text="例如: scanning/pending (不用带 \\\\IP)").grid(row=4, column=0, sticky=tk.W, pady=(0, 10), padx=5)
 
         # 3. Local Path
-        ttk.Label(frame, text="本地保存路径:").grid(row=4, column=0, sticky=tk.W, pady=(5, 0))
+        ttk.Label(frame, text="本地保存路径:").grid(row=5, column=0, sticky=tk.W, pady=(5, 0))
         path_frame = ttk.Frame(frame)
-        path_frame.grid(row=5, column=0, sticky=tk.W, fill=tk.X)
+        path_frame.grid(row=6, column=0, sticky=tk.W, fill=tk.X)
         
         self.local_path_var = tk.StringVar(value=self.config.get("auto_local_path", ""))
         ttk.Entry(path_frame, textvariable=self.local_path_var, width=40).pack(side=tk.LEFT)
@@ -111,17 +237,17 @@ class SettingsDialog(tk.Toplevel):
 
         # 4. Other Options
         self.del_after = tk.BooleanVar(value=self.config.get("delete_after_download", False))
-        ttk.Checkbutton(frame, text="下载后自动删除服务器文件", variable=self.del_after).grid(row=6, column=0, sticky=tk.W, pady=(15, 5))
+        ttk.Checkbutton(frame, text="下载后自动删除服务器文件", variable=self.del_after).grid(row=7, column=0, sticky=tk.W, pady=(15, 5))
 
         self.auto_start = tk.BooleanVar(value=self.config.get("auto_start_enabled", False))
-        ttk.Checkbutton(frame, text="开机自动启动软件", variable=self.auto_start).grid(row=7, column=0, sticky=tk.W, pady=5)
+        ttk.Checkbutton(frame, text="开机自动启动软件", variable=self.auto_start).grid(row=8, column=0, sticky=tk.W, pady=5)
         
         self.skip_today = tk.BooleanVar(value=self.config.get("skip_downloaded_today", True))
-        ttk.Checkbutton(frame, text="跳过今日已下载过的文件", variable=self.skip_today).grid(row=8, column=0, sticky=tk.W, pady=5)
+        ttk.Checkbutton(frame, text="跳过今日已下载过的文件", variable=self.skip_today).grid(row=9, column=0, sticky=tk.W, pady=5)
 
         # Buttons
         btn_frame = ttk.Frame(frame)
-        btn_frame.grid(row=9, column=0, pady=20)
+        btn_frame.grid(row=10, column=0, pady=20)
         ttk.Button(btn_frame, text="保存", command=self.save_settings).pack(side=tk.LEFT, padx=10)
         ttk.Button(btn_frame, text="取消", command=self.destroy).pack(side=tk.LEFT, padx=10)
 
@@ -130,10 +256,21 @@ class SettingsDialog(tk.Toplevel):
         if path:
             self.local_path_var.set(path)
 
+    def choose_source_path(self):
+        if not self.app.conn:
+            messagebox.showwarning("未连接", "请先在主界面连接服务器，才能浏览远程文件夹。\n或者您也可以手动输入路径。")
+            return
+            
+        dlg = RemoteBrowserDialog(self, self.app.conn)
+        self.wait_window(dlg)
+        if dlg.result_path:
+            self.source_path_var.set(dlg.result_path)
+
     def save_settings(self):
         # Update config in app
         new_conf = {
             "auto_download_enabled": self.auto_enabled.get(),
+            "check_interval": self.interval_var.get(),
             "auto_source_path": self.source_path_var.get().strip(),
             "auto_local_path": self.local_path_var.get().strip(),
             "delete_after_download": self.del_after.get(),
@@ -295,7 +432,9 @@ class SMBBrowserApp:
         ttk.Entry(top_frame, textvariable=self.password, show="*", width=12).grid(row=0, column=7, padx=5)
         
         self.connect_btn = ttk.Button(top_frame, text="连接", command=self.start_connect_thread)
-        self.connect_btn.grid(row=0, column=8, padx=10)
+        self.connect_btn.grid(row=0, column=8, padx=5)
+
+        ttk.Button(top_frame, text="配置", command=self.show_settings, width=6).grid(row=0, column=9, padx=5)
 
         # Middle Frame: File Browser
         mid_frame = ttk.Frame(self.root, padding="10")
@@ -396,6 +535,7 @@ class SMBBrowserApp:
                 
             # Automation defaults if missing
             if "auto_download_enabled" not in self.app_config: self.app_config["auto_download_enabled"] = False
+            if "check_interval" not in self.app_config: self.app_config["check_interval"] = 60
             if "auto_source_path" not in self.app_config: self.app_config["auto_source_path"] = ""
             if "auto_local_path" not in self.app_config: self.app_config["auto_local_path"] = ""
             if "delete_after_download" not in self.app_config: self.app_config["delete_after_download"] = False
@@ -1080,8 +1220,10 @@ class SMBBrowserApp:
     def automation_loop(self):
         while True:
              try:
-                # Check interval (default 60s)
-                time.sleep(60)
+                # Check interval
+                interval = self.app_config.get("check_interval", 60)
+                if interval < 5: interval = 5 # Safety minimum
+                time.sleep(interval)
                 
                 if not self.app_config.get("auto_download_enabled", False):
                     continue
