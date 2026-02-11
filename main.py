@@ -202,66 +202,73 @@ class SettingsDialog(tk.Toplevel):
         self.setup_ui()
 
     def setup_ui(self):
-        # Main content frame (Top)
-        frame = ttk.Frame(self, padding="20")
-        frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-        
-        # Buttons frame (Bottom) - Always visible
-        btn_frame = ttk.Frame(self, padding="10")
+        # Main container
+        container = ttk.Frame(self)
+        container.pack(fill=tk.BOTH, expand=True)
+
+        # Buttons frame (Bottom) - Packed first to ensure it's at the bottom
+        btn_frame = ttk.Frame(container, padding="10")
         btn_frame.pack(side=tk.BOTTOM, fill=tk.X)
         
-        ttk.Separator(self, orient=tk.HORIZONTAL).pack(side=tk.BOTTOM, fill=tk.X)
+        ttk.Separator(container, orient=tk.HORIZONTAL).pack(side=tk.BOTTOM, fill=tk.X)
+        
+        # Content frame (Top) - Scrollable if needed, but simple pack for now
+        # Using a canvas for scrolling is overkill, but let's just use a frame with pack
+        content_frame = ttk.Frame(container, padding="20")
+        content_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
-        # --- Content inside frame ---
+        # --- Content inside content_frame (Strict Vertical Pack) ---
         
         # 1. Automation Switch
         self.auto_enabled = tk.BooleanVar(value=self.config.get("auto_download_enabled", False))
-        ttk.Checkbutton(frame, text="启用自动监控下载", variable=self.auto_enabled).grid(row=0, column=0, sticky=tk.W, pady=(0, 2))
+        ttk.Checkbutton(content_frame, text="启用自动监控下载", variable=self.auto_enabled).pack(anchor=tk.W, pady=(0, 5))
         
         # 1.1 Check Interval
-        sub_frame = ttk.Frame(frame)
-        sub_frame.grid(row=1, column=0, sticky=tk.W, pady=(0, 10))
-        ttk.Label(sub_frame, text="检测间隔(秒):").pack(side=tk.LEFT)
+        interval_frame = ttk.Frame(content_frame)
+        interval_frame.pack(anchor=tk.W, fill=tk.X, pady=(0, 15))
+        ttk.Label(interval_frame, text="检测间隔(秒):").pack(side=tk.LEFT)
         self.interval_var = tk.IntVar(value=self.config.get("check_interval", 60))
-        ttk.Entry(sub_frame, textvariable=self.interval_var, width=5).pack(side=tk.LEFT, padx=5)
+        ttk.Entry(interval_frame, textvariable=self.interval_var, width=8).pack(side=tk.LEFT, padx=5)
 
         # 2. Source Path (Server)
-        ttk.Label(frame, text="服务器源路径 (共享名/文件夹):").grid(row=2, column=0, sticky=tk.W, pady=(5, 0))
-        src_frame = ttk.Frame(frame)
-        src_frame.grid(row=3, column=0, sticky=tk.W, pady=(0, 5))
+        ttk.Label(content_frame, text="服务器源路径 (共享名/文件夹):").pack(anchor=tk.W, pady=(5, 2))
+        
+        src_frame = ttk.Frame(content_frame)
+        src_frame.pack(fill=tk.X, pady=(0, 2))
         
         self.source_path_var = tk.StringVar(value=self.config.get("auto_source_path", ""))
-        ttk.Entry(src_frame, textvariable=self.source_path_var, width=40).pack(side=tk.LEFT)
-        ttk.Button(src_frame, text="选择...", command=self.choose_source_path).pack(side=tk.LEFT, padx=5)
+        ttk.Entry(src_frame, textvariable=self.source_path_var).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Button(src_frame, text="选择...", command=self.choose_source_path).pack(side=tk.LEFT, padx=(5, 0))
         
-        ttk.Label(frame, text="例如: scanning/pending (不用带 \\\\IP)").grid(row=4, column=0, sticky=tk.W, pady=(0, 10), padx=5)
+        ttk.Label(content_frame, text="例如: scanning/pending (不用带 \\\\IP)").pack(anchor=tk.W, pady=(0, 15))
 
         # 3. Local Path
-        ttk.Label(frame, text="本地保存路径:").grid(row=5, column=0, sticky=tk.W, pady=(5, 0))
-        path_frame = ttk.Frame(frame)
-        path_frame.grid(row=6, column=0, sticky=tk.W, fill=tk.X, pady=(0, 10))
+        ttk.Label(content_frame, text="本地保存路径:").pack(anchor=tk.W, pady=(5, 2))
+        
+        path_frame = ttk.Frame(content_frame)
+        path_frame.pack(fill=tk.X, pady=(0, 15))
         
         self.local_path_var = tk.StringVar(value=self.config.get("auto_local_path", ""))
-        ttk.Entry(path_frame, textvariable=self.local_path_var, width=40).pack(side=tk.LEFT)
-        ttk.Button(path_frame, text="选择...", command=self.choose_local_path).pack(side=tk.LEFT, padx=5)
+        ttk.Entry(path_frame, textvariable=self.local_path_var).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Button(path_frame, text="选择...", command=self.choose_local_path).pack(side=tk.LEFT, padx=(5, 0))
 
         # 4. Other Options
         self.del_after = tk.BooleanVar(value=self.config.get("delete_after_download", False))
-        ttk.Checkbutton(frame, text="下载后自动删除服务器文件", variable=self.del_after).grid(row=7, column=0, sticky=tk.W, pady=(5, 2))
+        ttk.Checkbutton(content_frame, text="下载后自动删除服务器文件", variable=self.del_after).pack(anchor=tk.W, pady=2)
 
         self.auto_start = tk.BooleanVar(value=self.config.get("auto_start_enabled", False))
-        ttk.Checkbutton(frame, text="开机自动启动软件", variable=self.auto_start).grid(row=8, column=0, sticky=tk.W, pady=2)
+        ttk.Checkbutton(content_frame, text="开机自动启动软件", variable=self.auto_start).pack(anchor=tk.W, pady=2)
         
         self.skip_today = tk.BooleanVar(value=self.config.get("skip_downloaded_today", True))
-        ttk.Checkbutton(frame, text="跳过今日已下载过的文件", variable=self.skip_today).grid(row=9, column=0, sticky=tk.W, pady=2)
+        ttk.Checkbutton(content_frame, text="跳过今日已下载过的文件", variable=self.skip_today).pack(anchor=tk.W, pady=2)
 
         # Buttons in btn_frame
         # Center the buttons
         inner_btn_frame = ttk.Frame(btn_frame)
         inner_btn_frame.pack(anchor=tk.CENTER)
         
-        ttk.Button(inner_btn_frame, text="保存", command=self.save_settings, width=8).pack(side=tk.LEFT, padx=20)
-        ttk.Button(inner_btn_frame, text="取消", command=self.destroy, width=8).pack(side=tk.LEFT, padx=20)
+        ttk.Button(inner_btn_frame, text="保存", command=self.save_settings, width=10).pack(side=tk.LEFT, padx=15)
+        ttk.Button(inner_btn_frame, text="取消", command=self.destroy, width=10).pack(side=tk.LEFT, padx=15)
 
     def choose_local_path(self):
         path = filedialog.askdirectory()
