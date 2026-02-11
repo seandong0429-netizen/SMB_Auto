@@ -1,0 +1,39 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+
+    - name: Build with PyInstaller
+      # Use --noconsole for GUI app, --onefile for single exe
+      # Add --add-data for resources like images if needed (format: src;dest)
+      # Assuming wechat_qr.png and app_icon.ico are in root
+      run: |
+        pyinstaller --noconfirm --onefile --windowed --icon "app_icon.ico" --add-data "wechat_qr.png;." --add-data "app_icon.ico;." --name "YunKaiSMBClient" main.py
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: YunKaiSMBClient-Windows
+        path: dist/YunKaiSMBClient.exe
